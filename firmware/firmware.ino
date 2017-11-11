@@ -47,6 +47,13 @@
 #define MODE_CHARGE     0x51 // enable charge mode
 #define MODE_DISCHARGE  0x52 // enable discharge mode
 
+#define READ_A1         0x62 // read analog input A1
+#define READ_V1         0x63 // read analog input A1 and convert in voltage
+#define READ_A2         0x64
+#define READ_V2         0x65
+#define READ_A3         0x66
+#define READ_V3         0x67
+
 #define PING            0xA0 // just a ping
 
 #define STOP_BYTE       0xff // sent after all communication
@@ -68,31 +75,33 @@
 #define CHARGE_THRESHOLD       1500      // Charge threshold (mV)
 #define DECHARGE_THRESHOLD      900      // Decharge threshold (mV)
 
-unsigned long gVoltageHist[VOLTAGE_HISTORY_NUM];         // Voltage history
+unsigned long gVoltageHist[4][VOLTAGE_HISTORY_NUM];         // Voltage history
 unsigned long gHistCounter = 0;                  // Voltage measurement counter
 
 //-----------------------------------------------------------------------------
 //- Init voltage history
 //-----------------------------------------------------------------------------
 void initVoltageHist() {
-  for (byte i = 0; i < VOLTAGE_HISTORY_NUM; i++) {
-    gVoltageHist[i] = CHARGE_THRESHOLD;
+  for (byte j = 0; j < 4; j++) {
+    for (byte i = 0; i < VOLTAGE_HISTORY_NUM; i++) {
+      gVoltageHist[j][i] = CHARGE_THRESHOLD;
+    }
   }
   gHistCounter = 0;
 }
 
-unsigned long computeAvgVoltage() {
+unsigned long computeAvgVoltage(uint32_t j) {
   unsigned long avgVoltage = 0;
 
   if (gHistCounter < VOLTAGE_HISTORY_NUM) {
     for (byte i = 0; i <= gHistCounter; i++) {
-      avgVoltage += gVoltageHist[i];
+      avgVoltage += gVoltageHist[j][i];
     }
     avgVoltage = floor(avgVoltage / (gHistCounter + 1));
   }
   else {
     for (byte i = 0; i < VOLTAGE_HISTORY_NUM; i++) {
-      avgVoltage += gVoltageHist[i];
+      avgVoltage += gVoltageHist[j][i];
     }
     avgVoltage = floor(avgVoltage / VOLTAGE_HISTORY_NUM);
   }
@@ -118,14 +127,23 @@ boolean toggleLed() {
   return b;
 }
 
-unsigned long getAnalog() {
-  return analogRead(PIN_ANALOG);
+unsigned long getAnalog(uint8_t pin) {
+  switch (pin) {
+    case 0:
+      return analogRead(A0);
+    case 1:
+      return analogRead(A1);
+    case 2:
+      return analogRead(A2);
+    case 3:
+      return analogRead(A3);
+  }
 }
 
-unsigned long getVoltage() {
+unsigned long getVoltage(uint8_t j) {
   unsigned long tmp, sum;
   for(byte i=0; i < NB_ANALOG_RD; i++){
-    tmp = getAnalog();
+    tmp = getAnalog(j);
     sum = sum + tmp;
     delay(1);
   }
@@ -133,10 +151,10 @@ unsigned long getVoltage() {
   // convert using CAN specs and ref value
   sum = (sum * CAN_REF) / CAN_BITSIZE;
 
-  gVoltageHist[gHistCounter % VOLTAGE_HISTORY_NUM] = sum;
+  gVoltageHist[j][gHistCounter % VOLTAGE_HISTORY_NUM] = sum;
   gHistCounter++;
   
-  return computeAvgVoltage();
+  return computeAvgVoltage(j);
 }
 
 // uint response
@@ -180,10 +198,28 @@ void loop() {
   byte in = Serial.read();
   switch (in) {
     case READ_A0:
-      sendUint(getAnalog());
+      sendUint(getAnalog(0));
       break;
     case READ_V:
-      sendUint(getVoltage());
+      sendUint(getVoltage(0));
+      break;
+    case READ_A1:
+      sendUint(getAnalog(1));
+      break;
+    case READ_V1:
+      sendUint(getVoltage(1));
+      break;
+    case READ_A2:
+      sendUint(getAnalog(2));
+      break;
+    case READ_V2:
+      sendUint(getVoltage(2));
+      break;
+    case READ_A3:
+      sendUint(getAnalog(3));
+      break;
+    case READ_V3:
+      sendUint(getVoltage(3));
       break;
 
     case LED_0:
